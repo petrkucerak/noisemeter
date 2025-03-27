@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>P2P Hlukoměr</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+      }
+      canvas {
+        border: 1px solid black;
+        margin-top: 10px;
+      }
+      button {
+        margin: 5px;
+        padding: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Hlukoměr 🎤</h1>
+    <button onclick="startMicrophone()">Zapnout mikrofon</button>
+    <button onclick="startPeer()">Připojit k mikrofonu přes P2P</button>
+    <button onclick="resetMaxVolume()">Reset maxima</button>
+    <button onclick="acceptPeerOffer()">Vložit kód druhého zařízení</button>
+    <p>Hlasitost: <span id="volume">0</span></p>
+    <p>Maximální hlasitost: <span id="maxVolume">0</span></p>
+    <canvas id="visualizer" width="400" height="100"></canvas>
+    <script>
+      let peerConnection, dataChannel;
+      let audioContext,
+        analyser,
+        volume = 0,
+        maxVolume = 0;
+      let canvas = document.getElementById("visualizer");
+      let ctx = canvas.getContext("2d");
+
+      function startMicrophone() {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          audioContext = new AudioContext();
+          let source = audioContext.createMediaStreamSource(stream);
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 256;
+          source.connect(analyser);
+
+          updateVolume();
+        });
+      }
+
+      function updateVolume() {
+        let dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+        volume = Math.max(...dataArray) / 255;
+        maxVolume = Math.max(maxVolume, volume);
+
+        document.getElementById("volume").innerText = (volume * 100).toFixed(1);
+        document.getElementById("maxVolume").innerText = (
+          maxVolume * 100
+        ).toFixed(1);
+        drawVolume();
+
+        if (dataChannel && dataChannel.readyState === "open") {
+          dataChannel.send(volume);
+        }
+
+        requestAnimationFrame(updateVolume);
+      }
+
+      function drawVolume() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "green";
+        ctx.fillRect(0, 0, canvas.width * volume, canvas.height);
+      }
+
+      function resetMaxVolume() {
+        maxVolume = 0;
+        document.getElementById("maxVolume").innerText = "0";
+      }
+
+      function startPeer() {
+        peerConnection = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        });
+        dataChannel = peerConnection.createDataChannel("noise");
+
+        peerConnection.onicecandidate = (event) => {
+          if (!event.candidate) {
+            prompt(
+              "Pošli tento kód druhému zařízení:",
+              JSON.stringify(peerConnection.localDescription)
+            );
+          }
+        };
+
+        dataChannel.onmessage = (event) => {
+          volume = parseFloat(event.data);
+          maxVolume = Math.max(maxVolume, volume);
+          document.getElementById("volume").innerText = (volume * 100).toFixed(
+            1
+          );
+          document.getElementById("maxVolume").innerText = (
+            maxVolume * 100
+          ).toFixed(1);
+          drawVolume();
+        };
+
+        peerConnection.createOffer().then((offer) => {
+          return peerConnection.setLocalDescription(offer);
+        });
+      }
+
+      function acceptPeerOffer() {
+        let remoteOffer = JSON.parse(
+          prompt("Vlož nabídku (Offer) z druhého zařízení:")
+        );
+        peerConnection = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        });
+
+        peerConnection.ondatachannel = (event) => {
+          dataChannel = event.channel;
+          dataChannel.onmessage = (event) => {
+            volume = parseFloat(event.data);
+            maxVolume = Math.max(maxVolume, volume);
+            document.getElementById("volume").innerText = (
+              volume * 100
+            ).toFixed(1);
+            document.getElementById("maxVolume").innerText = (
+              maxVolume * 100
+            ).toFixed(1);
+            drawVolume();
+          };
+        };
+
+        peerConnection.onicecandidate = (event) => {
+          if (!event.candidate) {
+            prompt(
+              "Pošli tento kód zpět prvnímu zařízení:",
+              JSON.stringify(peerConnection.localDescription)
+            );
+          }
+        };
+
+        peerConnection
+          .setRemoteDescription(remoteOffer)
+          .then(() => {
+            return peerConnection.createAnswer();
+          })
+          .then((answer) => {
+            return peerConnection.setLocalDescription(answer);
+          });
+      }
+    </script>
+  </body>
+</html>
