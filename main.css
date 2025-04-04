@@ -1,0 +1,45 @@
+html,
+body {
+  scroll-behavior: smooth;
+  margin: 0;
+  padding: 0;
+
+  background: #f5efe7;
+  color: #213555;
+  font-family: "Roboto", Arial, sans-serif;
+  font-size: 1.1rem;
+
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+
+  /* disable double click zoom */
+  touch-action: manipulation;
+
+  font-size: 1.5rem;
+}
+
+.main {
+  display: flex;
+  flex-direction: row;
+  width: 90vw;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.left,
+.right {
+  width: 45vw;
+}
+
+li {
+  margin-top: 0.5rem;
+  font-size: 2rem;
+}
+
+#currentNoise, #maxNoise {
+   font-size: 4rem;
+   font-weight: 600;
+}

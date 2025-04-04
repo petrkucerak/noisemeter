@@ -34,6 +34,11 @@
     <p>Nejhlasitější naměřený hluk: <span id="maxNoise">0</span> dB</p>
     <canvas id="noiseCanvas" width="300" height="30"></canvas>
 
+    <p>
+      Stáhnout konfiguraci pro Diecézko:
+      <a href="/diecezko.json" download="">diecezko.json</a>
+    </p>
+
     <script>
       let audioContext, analyser, microphone;
       let measuring = false;
@@ -85,6 +90,7 @@
         const existingRecord = records.find((r) => r.name === name);
         maxNoise = existingRecord ? existingRecord.noise : 0;
         document.getElementById("maxNoise").textContent = maxNoise;
+        channel.postMessage({ maxNoise: maxNoise });
         // Odeslání aktuálního jména na zobrazovací stránku
         channel.postMessage({ currentName: currentName });
       }
@@ -161,7 +167,7 @@
           records[index].noise = noise;
         }
         records.sort((a, b) => b.noise - a.noise);
-        records = records.slice(0, 5);
+        records = records.slice(0, 14);
         localStorage.setItem("noiseRecords", JSON.stringify(records));
         channel.postMessage({ updateRanking: true });
       }
