@@ -44,3 +44,7 @@ li {
   font-size: 4rem;
   font-weight: 600;
 }
+
+#currentMeasurement {
+  font-size: 3rem;
+}
