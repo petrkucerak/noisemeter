@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hlukoměr - Ovládání</title>
+    <style>
+      #measurementNames {
+        margin-top: 10px;
+      }
+      #measurementNames button {
+        margin: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Hlukoměr - Ovládání</h1>
+    <div>
+      <input type="text" id="newName" placeholder="Nové jméno měření" />
+      <button onclick="addMeasurementName()">Přidat jméno</button>
+    </div>
+    <div id="measurementNames"></div>
+    <button onclick="startMeasurement()">Spustit měření</button>
+    <button onclick="stopMeasurement()">Zastavit měření</button>
+    <button onclick="resetResults()">Resetovat výsledky</button>
+    <button onclick="exportResults()">Export JSON</button>
+    <input
+      type="file"
+      id="importFile"
+      accept=".json"
+      onchange="importResults(event)"
+    />
+    <p>Aktuálně vybrané měření: <span id="currentName">-</span></p>
+    <p>Nejhlasitější naměřený hluk: <span id="maxNoise">0</span> dB</p>
+    <canvas id="noiseCanvas" width="300" height="30"></canvas>
+
+    <script>
+      let audioContext, analyser, microphone;
+      let measuring = false;
+      let maxNoise = 0;
+      let currentName = "";
+      const canvas = document.getElementById("noiseCanvas");
+      const ctx = canvas.getContext("2d");
+      const channel = new BroadcastChannel("noise_data");
+
+      // Načtení a zobrazení předdefinovaných jmen
+      function loadMeasurementNames() {
+        const names =
+          JSON.parse(localStorage.getItem("measurementNames")) || [];
+        const container = document.getElementById("measurementNames");
+        container.innerHTML = "";
+        names.forEach((name) => {
+          const button = document.createElement("button");
+          button.textContent = name;
+          button.onclick = () => selectMeasurementName(name);
+          container.appendChild(button);
+        });
+      }
+
+      function addMeasurementName() {
+        const newName = document.getElementById("newName").value.trim();
+        if (!newName) {
+          alert("Zadejte jméno měření!");
+          return;
+        }
+        let names = JSON.parse(localStorage.getItem("measurementNames")) || [];
+        if (!names.includes(newName)) {
+          names.push(newName);
+          localStorage.setItem("measurementNames", JSON.stringify(names));
+          loadMeasurementNames();
+          document.getElementById("newName").value = "";
+        } else {
+          alert("Toto jméno již existuje!");
+        }
+      }
+
+      function selectMeasurementName(name) {
+        if (measuring) {
+          alert("Nelze měnit jméno během měření! Nejprve zastavte měření.");
+          return;
+        }
+        currentName = name;
+        document.getElementById("currentName").textContent = name;
+        const records = JSON.parse(localStorage.getItem("noiseRecords")) || [];
+        const existingRecord = records.find((r) => r.name === name);
+        maxNoise = existingRecord ? existingRecord.noise : 0;
+        document.getElementById("maxNoise").textContent = maxNoise;
+        // Odeslání aktuálního jména na zobrazovací stránku
+        channel.postMessage({ currentName: currentName });
+      }
+
+      async function startMeasurement() {
+        if (!currentName) {
+          alert("Nejprve vyberte jméno měření!");
+          return;
+        }
+        if (!measuring) {
+          measuring = true;
+
+          // Načtení existujícího maxima nebo vytvoření nového záznamu
+          let records = JSON.parse(localStorage.getItem("noiseRecords")) || [];
+          const existingRecord = records.find((r) => r.name === currentName);
+          maxNoise = existingRecord ? existingRecord.noise : 0;
+          document.getElementById("maxNoise").textContent = maxNoise;
+
+          if (!existingRecord) {
+            records.push({ name: currentName, noise: maxNoise });
+            localStorage.setItem("noiseRecords", JSON.stringify(records));
+            channel.postMessage({ updateRanking: true });
+          }
+
+          try {
+            audioContext = new (window.AudioContext ||
+              window.webkitAudioContext)();
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+            });
+            microphone = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            microphone.connect(analyser);
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            function updateNoise() {
+              if (!measuring) return;
+              analyser.getByteFrequencyData(dataArray);
+              let sum = dataArray.reduce((a, b) => a + b, 0);
+              let noiseLevel = Math.round(sum / dataArray.length / 2);
+              if (noiseLevel > maxNoise) {
+                maxNoise = noiseLevel;
+                document.getElementById("maxNoise").textContent = maxNoise;
+                updateRecord(currentName, maxNoise);
+              }
+
+              channel.postMessage({
+                noiseLevel,
+                maxNoise,
+                name: currentName,
+                currentName: currentName,
+              });
+              drawNoiseLevel(noiseLevel);
+              requestAnimationFrame(updateNoise);
+            }
+            updateNoise();
+          } catch (err) {
+            alert("Přístup k mikrofonu byl odepřen.");
+          }
+        }
+      }
+
+      function stopMeasurement() {
+        measuring = false;
+        if (audioContext) audioContext.close();
+      }
+
+      function updateRecord(name, noise) {
+        let records = JSON.parse(localStorage.getItem("noiseRecords")) || [];
+        const index = records.findIndex((r) => r.name === name);
+        if (index !== -1) {
+          records[index].noise = noise;
+        }
+        records.sort((a, b) => b.noise - a.noise);
+        records = records.slice(0, 5);
+        localStorage.setItem("noiseRecords", JSON.stringify(records));
+        channel.postMessage({ updateRanking: true });
+      }
+
+      function resetResults() {
+        if (confirm("Opravdu chcete smazat všechny výsledky?")) {
+          localStorage.removeItem("noiseRecords");
+          maxNoise = 0;
+          document.getElementById("maxNoise").textContent = maxNoise;
+          currentName = "";
+          document.getElementById("currentName").textContent = "-";
+          channel.postMessage({ updateRanking: true, currentName: "-" });
+          alert("Výsledky byly resetovány!");
+        }
+      }
+
+      function exportResults() {
+        const records = JSON.parse(localStorage.getItem("noiseRecords")) || [];
+        const names =
+          JSON.parse(localStorage.getItem("measurementNames")) || [];
+        const data = {
+          records: records,
+          names: names,
+        };
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "noise_data.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      function importResults(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          try {
+            const importedData = JSON.parse(e.target.result);
+            if (
+              importedData.records &&
+              Array.isArray(importedData.records) &&
+              importedData.names &&
+              Array.isArray(importedData.names)
+            ) {
+              localStorage.setItem(
+                "noiseRecords",
+                JSON.stringify(importedData.records)
+              );
+              localStorage.setItem(
+                "measurementNames",
+                JSON.stringify(importedData.names)
+              );
+              loadMeasurementNames();
+              channel.postMessage({ updateRanking: true, currentName: "-" });
+              currentName = "";
+              document.getElementById("currentName").textContent = "-";
+              maxNoise = 0;
+              document.getElementById("maxNoise").textContent = maxNoise;
+              alert("Data byla úspěšně importována!");
+            } else {
+              alert(
+                'Neplatný formát JSON! Očekává se objekt s poli "records" a "names".'
+              );
+            }
+          } catch (err) {
+            alert("Chyba při importu: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      function drawNoiseLevel(value) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let color = `rgb(${value * 2.5}, ${255 - value * 2.5}, 0)`;
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, (canvas.width / 100) * value, canvas.height);
+      }
+
+      // Inicializace
+      loadMeasurementNames();
+    </script>
+  </body>
+</html>
