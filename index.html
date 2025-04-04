@@ -167,7 +167,7 @@
           records[index].noise = noise;
         }
         records.sort((a, b) => b.noise - a.noise);
-        records = records.slice(0, 5);
+        records = records.slice(0, 14);
         localStorage.setItem("noiseRecords", JSON.stringify(records));
         channel.postMessage({ updateRanking: true });
       }
