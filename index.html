@@ -173,12 +173,18 @@
 
       function exportResults() {
         const records = JSON.parse(localStorage.getItem("noiseRecords")) || [];
-        const json = JSON.stringify(records, null, 2);
+        const names =
+          JSON.parse(localStorage.getItem("measurementNames")) || [];
+        const data = {
+          records: records,
+          names: names,
+        };
+        const json = JSON.stringify(data, null, 2);
         const blob = new Blob([json], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "noise_records.json";
+        a.download = "noise_data.json";
         a.click();
         URL.revokeObjectURL(url);
       }
@@ -190,16 +196,32 @@
         const reader = new FileReader();
         reader.onload = function (e) {
           try {
-            const importedRecords = JSON.parse(e.target.result);
-            if (Array.isArray(importedRecords)) {
+            const importedData = JSON.parse(e.target.result);
+            if (
+              importedData.records &&
+              Array.isArray(importedData.records) &&
+              importedData.names &&
+              Array.isArray(importedData.names)
+            ) {
               localStorage.setItem(
                 "noiseRecords",
-                JSON.stringify(importedRecords)
+                JSON.stringify(importedData.records)
               );
+              localStorage.setItem(
+                "measurementNames",
+                JSON.stringify(importedData.names)
+              );
+              loadMeasurementNames();
               channel.postMessage({ updateRanking: true });
+              currentName = "";
+              document.getElementById("currentName").textContent = "-";
+              maxNoise = 0;
+              document.getElementById("maxNoise").textContent = maxNoise;
               alert("Data byla úspěšně importována!");
             } else {
-              alert("Neplatný formát JSON!");
+              alert(
+                'Neplatný formát JSON! Očekává se objekt s poli "records" a "names".'
+              );
             }
           } catch (err) {
             alert("Chyba při importu: " + err.message);
