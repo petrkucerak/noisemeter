@@ -4,17 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hlukoměr - Zobrazení</title>
+    <link rel="stylesheet" href="main.css" />
   </head>
   <body>
-    <h1>Hlukoměr - Výsledky</h1>
-    <p>
-      Aktuální hluk: <span id="currentNoise">0</span> dB (měření:
-      <span id="currentMeasurement">-</span>)
-    </p>
-    <canvas id="noiseCanvas" width="300" height="30"></canvas>
-    <h2>Nejhlasitější měření:</h2>
-    <ul id="ranking"></ul>
-
+    <!-- <h1>Hlukoměr</h1> -->
+    <main class="main">
+      <div class="left">
+        <h2 id="currentMeasurement">Hlukoměr</h2>
+        <p>Aktuální hluk: <span id="currentNoise">0</span> dB</p>
+        <p>Maximální hluk: <span id="maxNoise">0</span> dB</p>
+        <canvas id="noiseCanvas" width="300" height="500"></canvas>
+      </div>
+      <div class="right">
+        <h2>Žebříček</h2>
+        <ol id="ranking"></ol>
+      </div>
+    </main>
     <script>
       const canvas = document.getElementById("noiseCanvas");
       const ctx = canvas.getContext("2d");
@@ -25,6 +30,9 @@
         localStorage.getItem("currentName") || "-";
 
       channel.onmessage = (event) => {
+        if (event.data.maxNoise !== undefined) {
+          document.getElementById("maxNoise").innerText = event.data.maxNoise;
+        }
         if (event.data.updateRanking) {
           updateRanking();
           if (event.data.currentName !== undefined) {
