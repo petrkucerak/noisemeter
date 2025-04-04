@@ -4,8 +4,8 @@ body {
   margin: 0;
   padding: 0;
 
-  background: #f5efe7;
-  color: #213555;
+  background: #000;
+  color: #fff;
   font-family: "Roboto", Arial, sans-serif;
   font-size: 1.1rem;
 
@@ -36,10 +36,10 @@ body {
 
 li {
   margin-top: 0.5rem;
-  font-size: 2rem;
 }
 
-#currentNoise, #maxNoise {
-   font-size: 4rem;
-   font-weight: 600;
+#currentNoise,
+#maxNoise {
+  font-size: 4rem;
+  font-weight: 600;
 }
