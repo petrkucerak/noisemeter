@@ -1,71 +1,94 @@
 <!DOCTYPE html>
 <html lang="cs">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>P2P Hlukoměr</title>
-    <style>
-      body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        min-height: 100vh;
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-      }
-      main,
-      footer {
-        max-width: 1000px;
-        width: 90vw;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        align-items: center;
-      }
-      button {
-        text-transform: uppercase;
-      }
-      .controls {
-        width: 100%;
-        display: flex;
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: center;
-      }
-      canvas {
-        border: 1px solid black;
-        margin-top: 10px;
-      }
-      .numbers {
-        width: 100%;
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Hlukoměr 🎤</h1>
-      <div class="controls">
-        <button onclick="startMicrophone()">Zapnout mikrofon</button>
-        <button onclick="resetMaxVolume()">Reset maxima</button>
-        <button onclick="startPeer()">Vytvořit spojení</button>
-        <button onclick="acceptPeerOffer()">Spojit se</button>
-      </div>
-      <div class="graph">
-        <canvas id="visualizer" width="400" height="100"></canvas>
-      </div>
-      <div class="numbers">
-        <p>Hlasitost: <span id="volume">0</span></p>
-        <p>Maximální hlasitost: <span id="maxVolume">0</span></p>
-      </div>
-    </main>
-    <footer>
-      <p>
-        Vytvořil
-        <a href="https://petrkucerak.cz" target="_blank">Petr Kučera</a>
-      </p>
-      <script src="main.js"></script>
-    </footer>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hlukoměr - Ovládání</title>
+</head>
+<body>
+    <h1>Hlukoměr - Ovládání</h1>
+    <button onclick="startMeasurement()">Spustit měření</button>
+    <button onclick="stopMeasurement()">Zastavit měření</button>
+    <input type="text" id="name" placeholder="Název měření">
+    <button onclick="saveMeasurement()">Uložit</button>
+    <p>Nejhlasitější naměřený hluk: <span id="maxNoise">0</span> dB</p>
+    <canvas id="noiseCanvas" width="300" height="30"></canvas>
+
+    <script>
+        let audioContext, analyser, microphone;
+        let measuring = false;
+        let maxNoise = 0;
+        const canvas = document.getElementById('noiseCanvas');
+        const ctx = canvas.getContext('2d');
+        const channel = new BroadcastChannel('noise_data'); // Komunikace mezi stránkami
+
+        async function startMeasurement() {
+            if (!measuring) {
+                measuring = true;
+                maxNoise = 0;
+                document.getElementById('maxNoise').textContent = maxNoise;
+
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    microphone = audioContext.createMediaStreamSource(stream);
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = 256;
+                    microphone.connect(analyser);
+
+                    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                    function updateNoise() {
+                        if (!measuring) return;
+                        analyser.getByteFrequencyData(dataArray);
+                        let sum = dataArray.reduce((a, b) => a + b, 0);
+                        let noiseLevel = Math.round((sum / dataArray.length) / 2);
+                        if (noiseLevel > maxNoise) {
+                            maxNoise = noiseLevel;
+                            document.getElementById('maxNoise').textContent = maxNoise;
+                        }
+
+                        // Odeslání dat na zobrazovací stránku
+                        channel.postMessage({ noiseLevel, maxNoise });
+                        drawNoiseLevel(noiseLevel);
+                        requestAnimationFrame(updateNoise);
+                    }
+                    updateNoise();
+                } catch (err) {
+                    alert("Přístup k mikrofonu byl odepřen.");
+                }
+            }
+        }
+
+        function stopMeasurement() {
+            measuring = false;
+            if (audioContext) audioContext.close();
+        }
+
+        function saveMeasurement() {
+            const name = document.getElementById('name').value.trim();
+            if (!name) {
+                alert('Zadejte název měření!');
+                return;
+            }
+
+            let records = JSON.parse(localStorage.getItem('noiseRecords')) || [];
+            records.push({ name, noise: maxNoise });
+            records.sort((a, b) => b.noise - a.noise);
+            records = records.slice(0, 5);
+            localStorage.setItem('noiseRecords', JSON.stringify(records));
+
+            alert('Měření uloženo!');
+            stopMeasurement();
+            startMeasurement();
+        }
+
+        function drawNoiseLevel(value) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let color = `rgb(${value * 2.5}, ${255 - value * 2.5}, 0)`;
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, (canvas.width / 100) * value, canvas.height);
+        }
+    </script>
+</body>
 </html>
