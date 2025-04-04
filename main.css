@@ -37,3 +37,8 @@ body {
 li {
   margin-top: 0.5rem;
 }
+
+#currentNoise, #maxNoise {
+   font-size: 4rem;
+   font-weight: 600;
+}
