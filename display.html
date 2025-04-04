@@ -21,7 +21,7 @@
         if (event.data.updateRanking) {
           updateRanking();
         } else {
-          let { noiseLevel } = event.data;
+          let { noiseLevel, name } = event.data;
           document.getElementById("currentNoise").textContent = noiseLevel;
           drawNoiseLevel(noiseLevel);
           updateRanking();
