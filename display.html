@@ -21,6 +21,7 @@
       </div>
     </main>
     <script>
+      let currentNameTmp = "";
       const canvas = document.getElementById("noiseCanvas");
       const ctx = canvas.getContext("2d");
       const channel = new BroadcastChannel("noise_data");
@@ -38,12 +39,14 @@
           if (event.data.currentName !== undefined) {
             document.getElementById("currentMeasurement").textContent =
               event.data.currentName;
+            currentNameTmp = event.data.currentName || "-";
           }
         } else {
           let { noiseLevel, name, currentName } = event.data;
           document.getElementById("currentNoise").textContent = noiseLevel;
           document.getElementById("currentMeasurement").textContent =
             currentName || "-";
+          currentNameTmp = event.data.currentName || "-";
           drawNoiseLevel(noiseLevel);
           updateRanking();
         }
@@ -63,7 +66,9 @@
 
         records.forEach((record) => {
           let li = document.createElement("li");
-          li.textContent = `${record.name}: ${record.noise} dB`;
+          if (currentNameTmp == record.name)
+            li.innerHTML = `<strong>${record.name}: ${record.noise} dB</strong>`;
+          else li.textContent = `${record.name}: ${record.noise} dB`;
           rankingList.appendChild(li);
         });
       }
