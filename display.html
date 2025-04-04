@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hlukoměr - Zobrazení</title>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Hlukoměr - Výsledky</h1>
     <p>Aktuální hluk: <span id="currentNoise">0</span> dB</p>
     <canvas id="noiseCanvas" width="300" height="30"></canvas>
@@ -13,37 +13,41 @@
     <ul id="ranking"></ul>
 
     <script>
-        const canvas = document.getElementById('noiseCanvas');
-        const ctx = canvas.getContext('2d');
-        const channel = new BroadcastChannel('noise_data'); // Komunikace mezi stránkami
+      const canvas = document.getElementById("noiseCanvas");
+      const ctx = canvas.getContext("2d");
+      const channel = new BroadcastChannel("noise_data");
 
-        channel.onmessage = (event) => {
-            let { noiseLevel, maxNoise } = event.data;
-            document.getElementById('currentNoise').textContent = noiseLevel;
-            drawNoiseLevel(noiseLevel);
-            updateRanking();
-        };
-
-        function drawNoiseLevel(value) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let color = `rgb(${value * 2.5}, ${255 - value * 2.5}, 0)`;
-            ctx.fillStyle = color;
-            ctx.fillRect(0, 0, (canvas.width / 100) * value, canvas.height);
+      channel.onmessage = (event) => {
+        if (event.data.updateRanking) {
+          updateRanking();
+        } else {
+          let { noiseLevel } = event.data;
+          document.getElementById("currentNoise").textContent = noiseLevel;
+          drawNoiseLevel(noiseLevel);
+          updateRanking();
         }
+      };
 
-        function updateRanking() {
-            let records = JSON.parse(localStorage.getItem('noiseRecords')) || [];
-            let rankingList = document.getElementById('ranking');
-            rankingList.innerHTML = '';
+      function drawNoiseLevel(value) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let color = `rgb(${value * 2.5}, ${255 - value * 2.5}, 0)`;
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, (canvas.width / 100) * value, canvas.height);
+      }
 
-            records.forEach(record => {
-                let li = document.createElement('li');
-                li.textContent = `${record.name}: ${record.noise} dB`;
-                rankingList.appendChild(li);
-            });
-        }
+      function updateRanking() {
+        let records = JSON.parse(localStorage.getItem("noiseRecords")) || [];
+        let rankingList = document.getElementById("ranking");
+        rankingList.innerHTML = "";
 
-        updateRanking(); // Načte žebříček při otevření stránky
+        records.forEach((record) => {
+          let li = document.createElement("li");
+          li.textContent = `${record.name}: ${record.noise} dB`;
+          rankingList.appendChild(li);
+        });
+      }
+
+      updateRanking();
     </script>
-</body>
+  </body>
 </html>

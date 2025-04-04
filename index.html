@@ -1,94 +1,152 @@
 <!DOCTYPE html>
 <html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hlukoměr - Ovládání</title>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Hlukoměr - Ovládání</h1>
     <button onclick="startMeasurement()">Spustit měření</button>
     <button onclick="stopMeasurement()">Zastavit měření</button>
-    <input type="text" id="name" placeholder="Název měření">
+    <input type="text" id="name" placeholder="Název měření" />
     <button onclick="saveMeasurement()">Uložit</button>
+    <button onclick="resetResults()">Resetovat výsledky</button>
+    <button onclick="exportResults()">Export JSON</button>
+    <input
+      type="file"
+      id="importFile"
+      accept=".json"
+      onchange="importResults(event)"
+    />
     <p>Nejhlasitější naměřený hluk: <span id="maxNoise">0</span> dB</p>
     <canvas id="noiseCanvas" width="300" height="30"></canvas>
 
     <script>
-        let audioContext, analyser, microphone;
-        let measuring = false;
-        let maxNoise = 0;
-        const canvas = document.getElementById('noiseCanvas');
-        const ctx = canvas.getContext('2d');
-        const channel = new BroadcastChannel('noise_data'); // Komunikace mezi stránkami
+      let audioContext, analyser, microphone;
+      let measuring = false;
+      let maxNoise = 0;
+      const canvas = document.getElementById("noiseCanvas");
+      const ctx = canvas.getContext("2d");
+      const channel = new BroadcastChannel("noise_data");
 
-        async function startMeasurement() {
-            if (!measuring) {
-                measuring = true;
-                maxNoise = 0;
-                document.getElementById('maxNoise').textContent = maxNoise;
+      async function startMeasurement() {
+        if (!measuring) {
+          measuring = true;
+          maxNoise = 0;
+          document.getElementById("maxNoise").textContent = maxNoise;
 
-                try {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    microphone = audioContext.createMediaStreamSource(stream);
-                    analyser = audioContext.createAnalyser();
-                    analyser.fftSize = 256;
-                    microphone.connect(analyser);
+          try {
+            audioContext = new (window.AudioContext ||
+              window.webkitAudioContext)();
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+            });
+            microphone = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            microphone.connect(analyser);
 
-                    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-                    function updateNoise() {
-                        if (!measuring) return;
-                        analyser.getByteFrequencyData(dataArray);
-                        let sum = dataArray.reduce((a, b) => a + b, 0);
-                        let noiseLevel = Math.round((sum / dataArray.length) / 2);
-                        if (noiseLevel > maxNoise) {
-                            maxNoise = noiseLevel;
-                            document.getElementById('maxNoise').textContent = maxNoise;
-                        }
+            function updateNoise() {
+              if (!measuring) return;
+              analyser.getByteFrequencyData(dataArray);
+              let sum = dataArray.reduce((a, b) => a + b, 0);
+              let noiseLevel = Math.round(sum / dataArray.length / 2);
+              if (noiseLevel > maxNoise) {
+                maxNoise = noiseLevel;
+                document.getElementById("maxNoise").textContent = maxNoise;
+              }
 
-                        // Odeslání dat na zobrazovací stránku
-                        channel.postMessage({ noiseLevel, maxNoise });
-                        drawNoiseLevel(noiseLevel);
-                        requestAnimationFrame(updateNoise);
-                    }
-                    updateNoise();
-                } catch (err) {
-                    alert("Přístup k mikrofonu byl odepřen.");
-                }
+              channel.postMessage({ noiseLevel, maxNoise });
+              drawNoiseLevel(noiseLevel);
+              requestAnimationFrame(updateNoise);
             }
+            updateNoise();
+          } catch (err) {
+            alert("Přístup k mikrofonu byl odepřen.");
+          }
+        }
+      }
+
+      function stopMeasurement() {
+        measuring = false;
+        if (audioContext) audioContext.close();
+      }
+
+      function saveMeasurement() {
+        const name = document.getElementById("name").value.trim();
+        if (!name) {
+          alert("Zadejte název měření!");
+          return;
         }
 
-        function stopMeasurement() {
-            measuring = false;
-            if (audioContext) audioContext.close();
-        }
+        let records = JSON.parse(localStorage.getItem("noiseRecords")) || [];
+        records.push({ name, noise: maxNoise });
+        records.sort((a, b) => b.noise - a.noise);
+        records = records.slice(0, 5);
+        localStorage.setItem("noiseRecords", JSON.stringify(records));
+        channel.postMessage({ updateRanking: true });
 
-        function saveMeasurement() {
-            const name = document.getElementById('name').value.trim();
-            if (!name) {
-                alert('Zadejte název měření!');
-                return;
+        alert("Měření uloženo!");
+        stopMeasurement();
+        startMeasurement();
+      }
+
+      function resetResults() {
+        if (confirm("Opravdu chcete smazat všechny výsledky?")) {
+          localStorage.removeItem("noiseRecords");
+          maxNoise = 0;
+          document.getElementById("maxNoise").textContent = maxNoise;
+          channel.postMessage({ updateRanking: true });
+          alert("Výsledky byly resetovány!");
+        }
+      }
+
+      function exportResults() {
+        const records = JSON.parse(localStorage.getItem("noiseRecords")) || [];
+        const json = JSON.stringify(records, null, 2);
+        const blob = new Blob([json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "noise_records.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      function importResults(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          try {
+            const importedRecords = JSON.parse(e.target.result);
+            if (Array.isArray(importedRecords)) {
+              localStorage.setItem(
+                "noiseRecords",
+                JSON.stringify(importedRecords)
+              );
+              channel.postMessage({ updateRanking: true });
+              alert("Data byla úspěšně importována!");
+            } else {
+              alert("Neplatný formát JSON!");
             }
+          } catch (err) {
+            alert("Chyba při importu: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      }
 
-            let records = JSON.parse(localStorage.getItem('noiseRecords')) || [];
-            records.push({ name, noise: maxNoise });
-            records.sort((a, b) => b.noise - a.noise);
-            records = records.slice(0, 5);
-            localStorage.setItem('noiseRecords', JSON.stringify(records));
-
-            alert('Měření uloženo!');
-            stopMeasurement();
-            startMeasurement();
-        }
-
-        function drawNoiseLevel(value) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let color = `rgb(${value * 2.5}, ${255 - value * 2.5}, 0)`;
-            ctx.fillStyle = color;
-            ctx.fillRect(0, 0, (canvas.width / 100) * value, canvas.height);
-        }
+      function drawNoiseLevel(value) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let color = `rgb(${value * 2.5}, ${255 - value * 2.5}, 0)`;
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, (canvas.width / 100) * value, canvas.height);
+      }
     </script>
-</body>
+  </body>
 </html>
